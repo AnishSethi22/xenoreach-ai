@@ -691,7 +691,6 @@ export default function NewCampaignPage() {
         {step === 5 && <Step5Review onLaunchSuccess={(id) => {
           setCampaignId(id);
           setLaunched(true);
-          reset();
         }} />}
       </div>
     </div>
