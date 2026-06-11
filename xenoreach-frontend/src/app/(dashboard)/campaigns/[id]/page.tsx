@@ -13,6 +13,7 @@ import { useCampaignBuilder } from '@/store/campaign-builder.store';
 import { useState } from 'react';
 import { StopCampaignModal } from '@/components/modals/StopCampaignModal';
 import { CompleteCampaignModal } from '@/components/modals/CompleteCampaignModal';
+import { LaunchSuccessModal } from '@/components/modals/LaunchSuccessModal';
 import { toast } from 'react-hot-toast';
 
 const FUNNEL_COLORS = ['#8B5CF6', '#10B981', '#0EA5E9', '#F59E0B', '#F43F5E'];
@@ -28,6 +29,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const queryClient = useQueryClient();
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
+  const [launchModalOpen, setLaunchModalOpen] = useState(false);
 
   const { data: campaign, isLoading } = useQuery({
     queryKey: ['campaign', id],
@@ -105,7 +107,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         if (action === 'resume') toast.success('Campaign Resumed');
         if (action === 'stop') toast.success('Campaign Stopped');
         if (action === 'complete') toast.success('Campaign Completed Successfully');
-        if (action === 'launch') toast.success('Campaign Launched');
+        if (action === 'launch') {
+          setLaunchModalOpen(true);
+        }
 
         queryClient.invalidateQueries({ queryKey: ['campaign', id] });
       }
@@ -121,21 +125,24 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const handleDelete = async () => {
     try {
       await api.delete(`/campaigns/${id}`);
+      toast.success('Draft deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       router.push('/campaigns');
     } catch (err) {
       console.error('Failed to delete campaign:', err);
+      toast.error('Failed to delete draft');
     }
   };
 
   const continueEditing = () => {
     useCampaignBuilder.setState({
-      step: 1,
-      goal: campaign.goal,
-      segmentRules: campaign.segmentRules,
-      audiencePreview: { count: campaign.audienceSize, sample: [] },
-      messageTemplate: campaign.messageTemplate,
-      channel: campaign.channel,
-      name: campaign.name,
+      step: 5, // Jump to Review step since it's a drafted campaign
+      goal: campaign.goal || '',
+      segmentRules: campaign.segmentRules || { operator: 'AND', conditions: [] },
+      audiencePreview: { count: campaign.audienceSize || 0, sample: [] },
+      messageTemplate: campaign.messageTemplate || '',
+      channel: campaign.channel || 'EMAIL',
+      name: campaign.name || '',
       description: campaign.description || '',
     });
     router.push('/campaigns/new');
@@ -373,6 +380,18 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         onClose={() => setCompleteModalOpen(false)}
         onConfirm={() => handleAction('complete')}
       />
+      
+      {campaign && (
+        <LaunchSuccessModal
+          isOpen={launchModalOpen}
+          campaignId={campaign.id}
+          campaignName={campaign.name}
+          audienceSize={campaign.audienceSize}
+          channel={campaign.channel}
+          estimatedReach={'High Engagement'}
+          onCreateAnother={() => setLaunchModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
