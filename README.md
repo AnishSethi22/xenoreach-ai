@@ -187,7 +187,7 @@ Navigate to `http://localhost:3000` — Demo Mode auto-authenticates. No login r
 
 ## Deployment
 
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for step-by-step Railway + Vercel deployment.
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for step-by-step Render + Vercel deployment.
 
 ---
 

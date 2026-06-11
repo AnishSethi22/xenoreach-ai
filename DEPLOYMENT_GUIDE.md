@@ -7,37 +7,40 @@
 
 ## Prerequisites
 
-- Railway account (https://railway.app)
+- Render account (https://render.com)
 - Vercel account (https://vercel.com)
 - Neon PostgreSQL database (https://neon.tech) — already provisioned
 - Node.js 18+ locally
 
 ---
 
-## Phase 1 — Backend Deployment (Railway)
+## Phase 1 — Backend Deployment (Render)
 
-### Step 1: Create Railway Project
+### Step 1: Create Web Service
 
-1. Log in to https://railway.app
-2. Click **New Project** → **Deploy from GitHub repo**
-3. Select your repository
-4. Set **Root Directory** to: `xenoreach-backend`
+1. Log in to https://render.com
+2. Click **New** → **Web Service**
+3. Select **Build and deploy from a Git repository**
+4. Connect your GitHub account and select your repository
 
-### Step 2: Configure Build & Start
+### Step 2: Configure Web Service
 
 | Setting | Value |
 |---|---|
+| Name | xenoreach-backend |
+| Environment | Node |
+| Region | (Select closest to Neon DB, e.g., US East) |
+| Branch | main |
+| Root Directory | xenoreach-backend |
 | Build Command | `npm run build` |
 | Start Command | `npm start` |
-| Root Directory | `xenoreach-backend` |
 
 ### Step 3: Set Environment Variables
 
-In Railway dashboard → Variables tab, add:
+In Render dashboard → Environment section, add:
 
 ```env
 NODE_ENV=production
-PORT=4000
 DATABASE_URL=postgresql://neondb_owner:<PASSWORD>@ep-crimson-violet-aqm73kvw.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require
 GEMINI_API_KEY=<your-gemini-api-key>
 GEMINI_MODEL=gemini-2.0-flash
@@ -45,25 +48,24 @@ JWT_SECRET=<strong-random-secret-min-32-chars>
 JWT_EXPIRES_IN=7d
 FRONTEND_URL=https://<your-vercel-domain>.vercel.app
 DEMO_MODE=true
-DEMO_USER_EMAIL=reviewer@xenoreach.ai
-DEMO_USER_NAME=Demo Reviewer
 ```
 
 > ⚠️ **IMPORTANT:** Never commit `.env` files. The DATABASE_URL and GEMINI_API_KEY in the local `.env` are for development only.
 
+*(Note: Render will automatically configure the port. `render.yaml` at the root of the project can also be used as a Blueprint for automated provisioning.)*
+
 ### Step 4: Deploy
 
-Click **Deploy**. Railway will:
+Click **Create Web Service**. Render will:
 1. Clone the repository
-2. Run `npm install`
-3. Run `npm run build` (TypeScript → `dist/`)
-4. Start `node dist/app.js`
+2. Run `npm install` and `npm run build`
+3. Start the application
 
 ### Step 5: Verify Backend
 
 Once deployed, visit:
 ```
-https://<your-railway-domain>/health
+https://<your-render-domain>/health
 ```
 
 Expected response:
@@ -107,10 +109,10 @@ Also verify:
 In Vercel dashboard → Settings → Environment Variables:
 
 ```env
-NEXT_PUBLIC_API_URL=https://<your-railway-domain>.railway.app
+NEXT_PUBLIC_API_URL=https://<your-render-domain>.onrender.com
 ```
 
-> This is the only required frontend environment variable. The API URL must point to your live Railway backend.
+> This is the only required frontend environment variable. The API URL must point to your live Render backend.
 
 ### Step 4: Deploy
 
@@ -123,7 +125,7 @@ Click **Deploy**. Vercel will:
 
 Visit your Vercel URL. You should see:
 - Login page (or auto-redirect to dashboard in Demo Mode)
-- Dashboard loading with live data from Railway backend
+- Dashboard loading with live data from Render backend
 - All KPI cards populated
 - Campaign list visible
 
@@ -157,12 +159,11 @@ Run through this checklist after every deployment:
 
 ## Environment Variables Reference
 
-### Backend (Railway)
+### Backend (Render)
 
 | Variable | Required | Description |
 |---|---|---|
 | `NODE_ENV` | ✅ | Set to `production` |
-| `PORT` | ✅ | `4000` (Railway sets automatically) |
 | `DATABASE_URL` | ✅ | Neon PostgreSQL connection string |
 | `GEMINI_API_KEY` | ✅ | Google AI Studio API key |
 | `GEMINI_MODEL` | ✅ | `gemini-2.0-flash` |
@@ -170,24 +171,23 @@ Run through this checklist after every deployment:
 | `JWT_EXPIRES_IN` | ✅ | `7d` |
 | `FRONTEND_URL` | ✅ | Vercel deployment URL |
 | `DEMO_MODE` | ✅ | `true` for reviewer access |
-| `DEMO_USER_EMAIL` | ✅ | `reviewer@xenoreach.ai` |
-| `DEMO_USER_NAME` | ✅ | `Demo Reviewer` |
 
 ### Frontend (Vercel)
 
 | Variable | Required | Description |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | ✅ | Railway backend URL |
+| `NEXT_PUBLIC_API_URL` | ✅ | Render backend URL |
 
 ---
 
 ## Rollback Steps
 
-### Backend Rollback (Railway)
-1. Go to Railway dashboard → Deployments
-2. Click the previous successful deployment
-3. Click **Redeploy**
-4. Verify `/health` endpoint responds
+### Backend Rollback (Render)
+1. Go to Render dashboard → web service
+2. Go to **Deploys**
+3. Select an earlier successful deploy
+4. Click **Deploy This Branch/Commit** again
+5. Verify `/health` endpoint responds
 
 ### Frontend Rollback (Vercel)
 1. Go to Vercel dashboard → Deployments
@@ -203,20 +203,6 @@ npx prisma migrate resolve --rolled-back <migration-name>
 ```
 
 > ⚠️ Data changes (new campaigns, customers) cannot be rolled back automatically. Always back up before running migrations.
-
----
-
-## Monitoring
-
-### Health Check URL
-```
-https://<railway-domain>/health
-```
-
-### Key Metrics to Watch
-- API response time > 2s → database connection issue
-- `activeCampaigns` not updating → campaign simulator stalled
-- AI Copilot returning errors → Gemini quota exhausted (CRM Intelligence fallback will activate automatically)
 
 ---
 

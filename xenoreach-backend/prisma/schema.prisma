@@ -1,0 +1,209 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalId  String?  @unique @map("external_id") @db.VarChar(50)
+  name        String   @db.VarChar(255)
+  email       String?  @unique @db.VarChar(255)
+  phone       String?  @db.VarChar(20)
+  city        String?  @db.VarChar(100)
+  state       String?  @db.VarChar(100)
+  gender      String?  @db.VarChar(10)
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  metrics              CustomerMetrics?
+  orders               Order[]
+  campaignRecipients   CampaignRecipient[]
+  communicationEvents  CommunicationEvent[]
+
+  @@map("customers")
+}
+
+model CustomerMetrics {
+  customerId          String   @id @map("customer_id") @db.Uuid
+  totalSpend          Decimal  @default(0) @map("total_spend") @db.Decimal(12, 2)
+  orderCount          Int      @default(0) @map("order_count")
+  avgOrderValue       Decimal  @default(0) @map("avg_order_value") @db.Decimal(12, 2)
+  lastOrderDate       DateTime? @map("last_order_date")
+  firstOrderDate      DateTime? @map("first_order_date")
+  daysSinceLast       Int?     @map("days_since_last")
+  engagementScore     Decimal  @default(0) @map("engagement_score") @db.Decimal(5, 2)
+  churnProbability    Decimal  @default(0) @map("churn_probability") @db.Decimal(5, 4)
+  purchasePropensity  Decimal  @default(0) @map("purchase_propensity") @db.Decimal(5, 4)
+  loyaltyTier         String   @default("BRONZE") @map("loyalty_tier") @db.VarChar(20)
+  loyaltyPoints       Int      @default(0) @map("loyalty_points")
+  recencyScore        Int?     @map("recency_score")
+  frequencyScore      Int?     @map("frequency_score")
+  monetaryScore       Int?     @map("monetary_score")
+  rfmSegment          String?  @map("rfm_segment") @db.VarChar(50)
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_metrics")
+}
+
+model Order {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String   @map("customer_id") @db.Uuid
+  orderNumber String   @unique @map("order_number") @db.VarChar(50)
+  status      String   @db.VarChar(20)
+  totalAmount Decimal  @map("total_amount") @db.Decimal(12, 2)
+  itemCount   Int      @map("item_count")
+  channel     String?  @db.VarChar(30)
+  storeId     String?  @map("store_id") @db.VarChar(50)
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  customer  Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items     OrderItem[]
+
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId     String  @map("order_id") @db.Uuid
+  productId   String? @map("product_id") @db.VarChar(50)
+  productName String? @map("product_name") @db.VarChar(255)
+  category    String? @db.VarChar(100)
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(12, 2)
+  totalPrice  Decimal @map("total_price") @db.Decimal(12, 2)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Campaign {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String    @db.VarChar(255)
+  description     String?
+  goal            String
+  status          String    @default("DRAFT") @db.VarChar(20)
+  channel         String    @db.VarChar(20)
+  segmentRules    Json      @map("segment_rules")
+  audienceSize    Int       @default(0) @map("audience_size")
+  messageTemplate String    @map("message_template")
+  subjectLine     String?   @map("subject_line") @db.VarChar(500)
+  aiReasoning     String?   @map("ai_reasoning")
+  scheduledAt     DateTime? @map("scheduled_at")
+  launchedAt      DateTime? @map("launched_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  recipients  CampaignRecipient[]
+  events      CommunicationEvent[]
+  analytics   CampaignAnalytics?
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId      String   @map("campaign_id") @db.Uuid
+  customerId      String   @map("customer_id") @db.Uuid
+  personalizedMsg String?  @map("personalized_msg")
+  status          String   @default("PENDING") @db.VarChar(20)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  campaign  Campaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer  Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  events    CommunicationEvent[]
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId])
+  @@index([customerId])
+  @@map("campaign_recipients")
+}
+
+model CommunicationEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientId String   @map("recipient_id") @db.Uuid
+  campaignId  String   @map("campaign_id") @db.Uuid
+  customerId  String   @map("customer_id") @db.Uuid
+  eventType   String   @map("event_type") @db.VarChar(20)
+  channel     String   @db.VarChar(20)
+  metadata    Json     @default("{}")
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+
+  recipient CampaignRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  campaign  Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer  Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([customerId])
+  @@index([eventType])
+  @@index([occurredAt])
+  @@map("communication_events")
+}
+
+model CampaignAnalytics {
+  campaignId        String  @id @map("campaign_id") @db.Uuid
+  totalRecipients   Int     @default(0) @map("total_recipients")
+  sentCount         Int     @default(0) @map("sent_count")
+  deliveredCount    Int     @default(0) @map("delivered_count")
+  failedCount       Int     @default(0) @map("failed_count")
+  openedCount       Int     @default(0) @map("opened_count")
+  readCount         Int     @default(0) @map("read_count")
+  clickedCount      Int     @default(0) @map("clicked_count")
+  convertedCount    Int     @default(0) @map("converted_count")
+  revenueAttributed Decimal @default(0) @map("revenue_attributed") @db.Decimal(12, 2)
+  deliveryRate      Decimal @default(0) @map("delivery_rate") @db.Decimal(5, 4)
+  openRate          Decimal @default(0) @map("open_rate") @db.Decimal(5, 4)
+  clickRate         Decimal @default(0) @map("click_rate") @db.Decimal(5, 4)
+  conversionRate    Decimal @default(0) @map("conversion_rate") @db.Decimal(5, 4)
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_analytics")
+}
+
+model Segment {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String   @db.VarChar(255)
+  description   String?
+  rules         Json
+  customerCount Int      @default(0) @map("customer_count")
+  isDynamic     Boolean  @default(true) @map("is_dynamic")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("segments")
+}
+
+model AiInsight {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type      String    @db.VarChar(50)
+  title     String    @db.VarChar(255)
+  body      String
+  priority  String    @default("MEDIUM") @db.VarChar(10)
+  metadata  Json      @default("{}")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([type])
+  @@index([priority])
+  @@map("ai_insights")
+}
