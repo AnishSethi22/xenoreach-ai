@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCampaignBuilder } from '@/store/campaign-builder.store';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { SegmentRule, CampaignChannel, AudiencePreview } from '@/types/campaign.types';
 import { formatCurrency, formatPercent, formatNumber, CHANNEL_COLORS } from '@/lib/utils';
@@ -621,6 +622,7 @@ import { useEffect } from 'react';
 import { LaunchSuccessModal } from '@/components/modals/LaunchSuccessModal';
 
 export default function NewCampaignPage() {
+  const queryClient = useQueryClient();
   const { step, reset } = useCampaignBuilder();
   const state = useCampaignBuilder();
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -689,6 +691,8 @@ export default function NewCampaignPage() {
         {step === 3 && <Step3Message />}
         {step === 4 && <Step4Channel />}
         {step === 5 && <Step5Review onLaunchSuccess={(id) => {
+          queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
           setCampaignId(id);
           setLaunched(true);
         }} />}
