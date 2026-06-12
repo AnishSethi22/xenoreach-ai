@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api } from '@/lib/api-client';
 import { OverviewMetrics, ChannelPerformance, AiInsight } from '@/types/analytics.types';
 import { Campaign } from '@/types/campaign.types';
@@ -8,7 +9,7 @@ import { formatCurrency, formatPercent, formatNumber, timeAgo, CHANNEL_COLORS, S
 import { useRouter } from 'next/navigation';
 import {
   Users, Megaphone, TrendingUp, ArrowUpRight, Zap, Sparkles,
-  MessageSquare, Mail, Phone, Radio, AlertCircle, Trophy, ChevronRight
+  MessageSquare, Mail, Phone, Radio, AlertCircle, Trophy, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { PaginatedResponse } from '@/types/common.types';
 import {
@@ -70,6 +71,8 @@ const CHANNEL_ICONS: Record<string, React.ElementType> = {
 
 export default function OverviewPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { data: overview, isLoading: overviewLoading } = useQuery({
     queryKey: ['analytics', 'overview'],
@@ -99,6 +102,14 @@ export default function OverviewPage() {
   const recentCampaigns = (campaigns as { data?: Campaign[] } | undefined)?.data || [];
   const topInsights = (insights as AiInsight[] | undefined)?.slice(0, 3) || [];
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ['analytics'] });
+    await queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    await queryClient.invalidateQueries({ queryKey: ['ai', 'insights'] });
+    setIsRefreshing(false);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -108,13 +119,23 @@ export default function OverviewPage() {
             Real-time performance across all campaigns and channels
           </p>
         </div>
-        <button
-          onClick={() => router.push('/campaigns/new')}
-          className="btn-primary text-sm"
-        >
-          <Zap size={14} />
-          New Campaign
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="btn-secondary text-sm flex items-center gap-2"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button
+            onClick={() => router.push('/campaigns/new')}
+            className="btn-primary text-sm"
+          >
+            <Zap size={14} />
+            New Campaign
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -7,7 +7,7 @@ import { api } from '@/lib/api-client';
 import { Customer } from '@/types/customer.types';
 import { PaginatedResponse } from '@/types/common.types';
 import { formatCurrency, formatPercent, timeAgo } from '@/lib/utils';
-import { Search, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Users, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 const LOYALTY_TIER_STYLES: Record<string, string> = {
   BRONZE: 'loyalty-bronze',
@@ -24,6 +24,7 @@ export default function CustomersPage() {
   const [loyaltyTier, setLoyaltyTier] = useState('ALL');
   const [page, setPage] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   let searchTimeout: NodeJS.Timeout;
   function handleSearchChange(val: string) {
@@ -35,7 +36,7 @@ export default function CustomersPage() {
     }, 400);
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['customers', page, debouncedSearch, loyaltyTier],
     queryFn: () => {
       const params = new URLSearchParams({
@@ -53,13 +54,29 @@ export default function CustomersPage() {
   const customers = data?.data || [];
   const pagination = data?.pagination;
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refetch();
+    setIsRefreshing(false);
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-semibold text-white">Customers</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {pagination?.total ? `${pagination.total.toLocaleString()} customers` : 'Loading...'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Customers</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {pagination?.total ? `${pagination.total.toLocaleString()} customers` : 'Loading...'}
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="btn-secondary text-sm flex items-center gap-2"
+        >
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       <div className="flex items-center gap-3">

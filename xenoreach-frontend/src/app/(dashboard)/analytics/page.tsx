@@ -1,9 +1,11 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api } from '@/lib/api-client';
 import { OverviewMetrics, ChannelPerformance, TrendDataPoint, RevenueBreakdown, AudienceHealth } from '@/types/analytics.types';
 import { formatCurrency, formatPercent, formatNumber, CHANNEL_COLORS } from '@/lib/utils';
+import { RefreshCw } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line
@@ -12,6 +14,8 @@ import {
 const FUNNEL_COLORS = ['#8B5CF6', '#10B981', '#0EA5E9', '#F59E0B'];
 
 export default function AnalyticsPage() {
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: overview } = useQuery({
     queryKey: ['analytics', 'overview'],
     queryFn: () => api.get<OverviewMetrics>('/analytics/overview'),
@@ -42,17 +46,33 @@ export default function AnalyticsPage() {
     value: t._count,
   })) || [];
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ['analytics'] });
+    setIsRefreshing(false);
+  };
+
   const LOYALTY_COLORS: Record<string, string> = {
     BRONZE: '#CD7F32', SILVER: '#A8A9AD', GOLD: '#FFD700', PLATINUM: '#E5E4E2',
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-xl font-semibold text-white">Analytics</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          Platform-wide performance insights and trends
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Analytics</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Platform-wide performance insights and trends
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="btn-secondary text-sm flex items-center gap-2"
+        >
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
