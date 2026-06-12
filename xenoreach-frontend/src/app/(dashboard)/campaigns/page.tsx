@@ -58,19 +58,19 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-white">Campaigns</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {data?.pagination.total || 0} total campaigns
-              </p>
-              <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
-              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                Updated {timeAgo(lastRefreshed.toISOString())}
-              </p>
-            </div>
+        <div>
+          <h1 className="text-xl font-semibold text-white">Campaigns</h1>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              {data?.pagination.total || 0} total campaigns
+            </p>
+            <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Updated {timeAgo(lastRefreshed.toISOString())}
+            </p>
           </div>
+        </div>
+        <div className="flex gap-3">
           <button 
             onClick={handleRefresh} 
             disabled={isRefreshing}
@@ -79,10 +79,10 @@ export default function CampaignsPage() {
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
             {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </button>
+          <button onClick={() => router.push('/campaigns/new')} className="btn-primary text-sm">
+            <Plus size={14} /> New Campaign
+          </button>
         </div>
-        <button onClick={() => router.push('/campaigns/new')} className="btn-primary text-sm">
-          <Plus size={14} /> New Campaign
-        </button>
       </div>
 
       <div className="flex items-center gap-3">
