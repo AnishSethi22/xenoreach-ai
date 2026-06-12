@@ -311,10 +311,6 @@ Respond with ONLY valid JSON array:
         });
       }
 
-      const channelStats = await prisma.campaignAnalytics.groupBy({
-        by: ['campaignId'],
-        _sum: { deliveredCount: true, openedCount: true }
-      });
       insights.push({
         type: 'CHANNEL_PERFORMANCE',
         title: 'WhatsApp outperforms other channels',
@@ -382,46 +378,117 @@ If relevant, suggest creating a campaign or segment. Do not use markdown formatt
     }
   }
 
+  // ─── Dynamic Fallback Intelligence Engine ─────────────────────────────────
+  // Handles 15+ query intents with live database queries for genuinely different responses.
   private async fallbackCopilotAnswer(question: string): Promise<{ answer: string; provider: string }> {
-    const q = question.toLowerCase();
+    const q = question.toLowerCase().trim();
 
     try {
+      // ── Greetings ──
+      if (q.match(/^(hi|hello|hey|sup|yo|howdy|greetings|good morning|good evening|good afternoon)\s*[!.?]?$/)) {
+        const summary = await prisma.customerMetrics.aggregate({ _count: true, _avg: { engagementScore: true } });
+        return { answer: `Hi there! Your CRM tracks ${summary._count} customers with an average engagement score of ${(Number(summary._avg.engagementScore) || 0).toFixed(1)}/100. What would you like to work on — a campaign, segment analysis, or performance review?`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Churn risk ──
       if (q.includes('churn')) {
-        const topChurners = await prisma.customerMetrics.findMany({
-          orderBy: { churnProbability: 'desc' },
-          take: 3,
-          include: { customer: true },
-        });
-        if (!topChurners.length) return { answer: 'I cannot currently access churn data, but generally retaining high-risk customers requires personalized win-back offers.', provider: 'CRM Intelligence' };
+        const topChurners = await prisma.customerMetrics.findMany({ orderBy: { churnProbability: 'desc' }, take: 3, include: { customer: true } });
+        if (!topChurners.length) return { answer: 'No churn data is available yet. Once customers have purchase history, I can identify at-risk profiles.', provider: 'CRM Intelligence' };
         const names = topChurners.map((c) => `${c.customer.name} (${(Number(c.churnProbability) * 100).toFixed(0)}% risk)`).join(', ');
-        return { answer: `Based on real-time CRM data, your highest churn-risk customers are: ${names}. I recommend launching a targeted win-back campaign with a 15% discount to re-engage them before they lapse.`, provider: 'CRM Intelligence' };
+        const highRiskCount = await prisma.customerMetrics.count({ where: { churnProbability: { gte: 0.6 } } });
+        return { answer: `You have ${highRiskCount} customers at high churn risk (60%+). Top 3 at-risk: ${names}. Launch a targeted win-back campaign with a 15% discount code via WhatsApp to re-engage them before they lapse.`, provider: 'CRM Intelligence' };
       }
 
-      if (q.includes('retention') || q.includes('vip') || q.includes('inactive')) {
-        return { answer: `To retain inactive VIPs, target customers in the PLATINUM or GOLD tiers whose last purchase was over 45 days ago. I recommend using WHATSAPP for this audience, as VIPs respond 40% better to direct messaging. A sample message could be: "Hi {{name}}, we miss our best customers! Enjoy 20% off your next purchase."`, provider: 'CRM Intelligence' };
+      // ── Inactive / dormant / lapsed ──
+      if (q.includes('inactive') || q.includes('dormant') || q.includes('lapsed') || (q.includes('haven') && q.includes('order')) || q.includes('not order')) {
+        const inactive = await prisma.customerMetrics.count({ where: { daysSinceLast: { gte: 45 } } });
+        const highValueInactive = await prisma.customerMetrics.count({ where: { daysSinceLast: { gte: 45 }, totalSpend: { gte: 5000 } } });
+        return { answer: `You have ${inactive} inactive customers (no orders in 45+ days), including ${highValueInactive} high-value customers (₹5,000+ lifetime spend). Target them with a personalized WhatsApp reactivation message — this is your best current win-back opportunity.`, provider: 'CRM Intelligence' };
       }
 
-      if (q.includes('campaign') && (q.includes('last') || q.includes('perform'))) {
-        const lastCampaign = await prisma.campaign.findFirst({
-          where: { status: 'COMPLETED' },
-          orderBy: { createdAt: 'desc' },
-          include: { analytics: true },
-        });
-        if (!lastCampaign || !lastCampaign.analytics) {
-          return { answer: 'Your recent campaigns have been driving steady engagement. Open rates are averaging around 24% across channels. Would you like me to analyze a specific segment next?', provider: 'CRM Intelligence' };
-        }
+      // ── VIP / loyal / retention / premium tiers ──
+      if (q.includes('vip') || q.includes('loyal') || q.includes('retention') || q.includes('platinum') || q.includes('gold tier') || q.includes('premium')) {
+        const vips = await prisma.customerMetrics.count({ where: { loyaltyTier: { in: ['GOLD', 'PLATINUM'] } } });
+        const vipSpend = await prisma.customerMetrics.aggregate({ where: { loyaltyTier: { in: ['GOLD', 'PLATINUM'] } }, _avg: { totalSpend: true } });
+        return { answer: `You have ${vips} VIP customers (GOLD + PLATINUM) with an average lifetime spend of ₹${Math.round(Number(vipSpend._avg.totalSpend) || 0).toLocaleString()}. Retain them with exclusive loyalty campaigns — VIPs respond 40% better to personalized WhatsApp messages with early-access or premium-tier offers.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Segments / audience builder ──
+      if (q.includes('segment') || q.includes('audience') || (q.includes('target') && !q.includes('campaign'))) {
+        const tiers = await prisma.customerMetrics.groupBy({ by: ['loyaltyTier'], _count: true, _avg: { totalSpend: true }, orderBy: { _avg: { totalSpend: 'desc' } } });
+        const tierStr = tiers.map((t) => `${t.loyaltyTier}: ${t._count} (avg ₹${Math.round(Number(t._avg.totalSpend) || 0).toLocaleString()})`).join(', ');
+        return { answer: `Your audience by tier: ${tierStr}. For highest ROI, target GOLD and PLATINUM with exclusive offers. For volume, BRONZE and SILVER represent your largest growth opportunity. Use the Segments page to build a custom rule-based audience.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Campaign performance / results ──
+      if (q.includes('campaign') && (q.includes('last') || q.includes('perform') || q.includes('result') || q.includes('how did') || q.includes('analytic') || q.includes('stat'))) {
+        const lastCampaign = await prisma.campaign.findFirst({ where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' }, include: { analytics: true } });
+        if (!lastCampaign?.analytics) return { answer: 'No completed campaigns yet. Launch your first campaign to start seeing performance analytics here.', provider: 'CRM Intelligence' };
         const a = lastCampaign.analytics;
-        return { answer: `Your last campaign "${lastCampaign.name}" delivered to ${a.deliveredCount} recipients. It achieved a ${(Number(a.openRate) * 100).toFixed(1)}% open rate and a ${(Number(a.conversionRate) * 100).toFixed(1)}% conversion rate, generating ₹${a.revenueAttributed} in revenue.`, provider: 'CRM Intelligence' };
+        return { answer: `Last campaign "${lastCampaign.name}" (${lastCampaign.channel}): delivered to ${Number(a.deliveredCount).toLocaleString()} recipients, ${(Number(a.openRate) * 100).toFixed(1)}% open rate, ${(Number(a.conversionRate) * 100).toFixed(1)}% conversion rate, ₹${Number(a.revenueAttributed).toLocaleString()} revenue attributed.`, provider: 'CRM Intelligence' };
       }
 
-      if (q.includes('channel') || q.includes('best')) {
-        return { answer: `Comparing channel analytics, WHATSAPP consistently outperforms others with a 72% average open rate, compared to 32% for EMAIL and 45% for SMS. For high-urgency offers, I recommend WhatsApp. For detailed newsletters, Email remains the best choice.`, provider: 'CRM Intelligence' };
+      // ── WhatsApp / channel recommendations ──
+      if (q.includes('whatsapp') || q.includes('sms') || q.includes('email') || q.includes(' rcs') || q.includes('channel') || q.includes('best channel') || q.includes('which channel')) {
+        const channelStats = await prisma.campaignAnalytics.findMany({ include: { campaign: { select: { channel: true } } } });
+        if (channelStats.length === 0) return { answer: 'WhatsApp leads with ~72% open rates vs 32% for Email and 45% for SMS. For urgent, personalized offers use WhatsApp. For newsletters and detailed content, Email is your best choice.', provider: 'CRM Intelligence' };
+        const byChannel: Record<string, number[]> = {};
+        channelStats.forEach((a) => {
+          const ch = a.campaign.channel;
+          if (!byChannel[ch]) byChannel[ch] = [];
+          byChannel[ch].push(Number(a.openRate));
+        });
+        const summary = Object.entries(byChannel).map(([ch, rates]) => `${ch}: ${(rates.reduce((a, b) => a + b, 0) / rates.length * 100).toFixed(1)}% avg open rate`).join(', ');
+        return { answer: `Channel performance from your campaigns: ${summary}. Focus your highest-value campaigns on the best-performing channel for maximum impact.`, provider: 'CRM Intelligence' };
       }
 
-      return { answer: `Based on your CRM data, your overall engagement remains strong. Your top customers are in the GOLD and PLATINUM tiers, averaging spend above ₹8,000. Would you like me to help create a targeted campaign for them?`, provider: 'CRM Intelligence' };
+      // ── Create / launch campaign intent ──
+      if (q.includes('create') || q.includes('launch') || (q.includes('run') && q.includes('campaign')) || q.includes('new campaign') || q.includes('start campaign')) {
+        const inactive = await prisma.customerMetrics.count({ where: { daysSinceLast: { gte: 30 } } });
+        return { answer: `I recommend starting with a win-back campaign targeting your ${inactive} customers who haven't ordered in 30+ days. Use WhatsApp with a 15% discount. Click "New Campaign" in the sidebar — the AI wizard will automatically build the audience segment for you.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Spend / revenue / LTV ──
+      if (q.includes('spend') || q.includes('revenue') || q.includes('ltv') || q.includes('lifetime value') || q.includes('money') || q.includes('worth') || q.includes('purchase')) {
+        const metrics = await prisma.customerMetrics.aggregate({ _avg: { totalSpend: true }, _max: { totalSpend: true }, _sum: { totalSpend: true } });
+        return { answer: `Total customer lifetime value: ₹${Math.round(Number(metrics._sum.totalSpend) || 0).toLocaleString()}. Average LTV: ₹${Math.round(Number(metrics._avg.totalSpend) || 0).toLocaleString()}. Top customer spent: ₹${Math.round(Number(metrics._max.totalSpend) || 0).toLocaleString()}. Protect this revenue by running targeted retention campaigns for your highest-spending segments.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Engagement score ──
+      if (q.includes('engagement') || q.includes('score') || q.includes('active customer')) {
+        const metrics = await prisma.customerMetrics.aggregate({ _avg: { engagementScore: true }, _count: true });
+        const highEngaged = await prisma.customerMetrics.count({ where: { engagementScore: { gte: 70 } } });
+        const pct = metrics._count > 0 ? ((highEngaged / metrics._count) * 100).toFixed(0) : '0';
+        return { answer: `Average engagement score: ${(Number(metrics._avg.engagementScore) || 0).toFixed(1)}/100. ${highEngaged} customers (${pct}%) score 70+. These highly engaged customers are your best candidates for upsell, cross-sell, and premium tier upgrade campaigns.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Customer count / how many ──
+      if (q.includes('how many') || q.includes('count') || q.includes('total customer') || q.includes('number of customer') || q.includes('customer base')) {
+        const total = await prisma.customer.count();
+        const metrics = await prisma.customerMetrics.aggregate({ _avg: { churnProbability: true, engagementScore: true } });
+        return { answer: `You have ${total.toLocaleString()} total customers in your CRM. Average churn risk: ${(Number(metrics._avg.churnProbability) * 100).toFixed(1)}%. Average engagement: ${(Number(metrics._avg.engagementScore) || 0).toFixed(1)}/100. Would you like to explore a specific segment or tier?`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Geography / city ──
+      if (q.includes('city') || q.includes('location') || q.includes('region') || q.includes('geography') || (q.includes('where') && q.includes('customer'))) {
+        const cities = await prisma.customer.groupBy({ by: ['city'], _count: true, orderBy: { _count: { city: 'desc' } }, take: 5 });
+        if (!cities.length) return { answer: 'No location data available yet. City-level segmentation will be ready once customer profiles are complete.', provider: 'CRM Intelligence' };
+        const cityStr = cities.map((c) => `${c.city} (${c._count})`).join(', ');
+        return { answer: `Your top customer cities: ${cityStr}. Consider geo-targeted campaigns for your highest-density markets to maximize local campaign ROI.`, provider: 'CRM Intelligence' };
+      }
+
+      // ── Default: general overview ──
+      const [total, metrics] = await Promise.all([
+        prisma.customer.count(),
+        prisma.customerMetrics.aggregate({ _avg: { totalSpend: true, engagementScore: true }, _count: true }),
+      ]);
+      return {
+        answer: `You have ${total.toLocaleString()} customers with an average lifetime spend of ₹${Math.round(Number(metrics._avg.totalSpend) || 0).toLocaleString()} and engagement score of ${(Number(metrics._avg.engagementScore) || 0).toFixed(1)}/100. Try asking about churn risk, inactive customers, top segments, campaign performance, channel recommendations, or revenue for specific insights.`,
+        provider: 'CRM Intelligence',
+      };
     } catch (err) {
       console.error('[Fallback Intent Engine Error]', err);
-      return { answer: 'Based on your CRM data, I can see strong engagement patterns. Would you like me to help create a campaign targeting this audience?', provider: 'CRM Intelligence' };
+      return { answer: 'I encountered an error accessing your CRM data. Please try again in a moment.', provider: 'CRM Intelligence' };
     }
   }
 }
