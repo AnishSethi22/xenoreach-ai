@@ -70,7 +70,7 @@ export default function CampaignsPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <button 
             onClick={handleRefresh} 
             disabled={isRefreshing}
@@ -79,7 +79,7 @@ export default function CampaignsPage() {
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
             {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </button>
-          <button onClick={() => router.push('/campaigns/new')} className="btn-primary text-sm">
+          <button onClick={() => router.push('/campaigns/new')} className="btn-primary text-sm flex items-center gap-2">
             <Plus size={14} /> New Campaign
           </button>
         </div>
