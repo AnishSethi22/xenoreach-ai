@@ -53,8 +53,10 @@ export function CopilotPanel() {
       if (result.provider) {
         setProvider(result.provider);
       }
-    } catch {
-      addMessage('assistant', 'I had trouble connecting to the AI service. Please check that the backend is running and try again.');
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[Copilot Error]', errorMsg);
+      addMessage('assistant', 'I ran into an issue fetching a response. Please try again in a moment.');
     } finally {
       setThinking(false);
     }

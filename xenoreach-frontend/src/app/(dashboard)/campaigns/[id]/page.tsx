@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Campaign, CommunicationEvent } from '@/types/campaign.types';
 import { formatNumber, formatPercent, formatCurrency, timeAgo, CHANNEL_COLORS, STATUS_COLORS, formatDate } from '@/lib/utils';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,17 +31,26 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [completeModalOpen, setCompleteModalOpen] = useState(false);
   const [launchModalOpen, setLaunchModalOpen] = useState(false);
 
-  const { data: campaign, isLoading } = useQuery({
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const { data: campaign, isLoading, refetch: refetchCampaign } = useQuery({
     queryKey: ['campaign', id],
     queryFn: () => api.get<Campaign>(`/campaigns/${id}`),
     refetchInterval: (query) => query.state.data?.status === 'RUNNING' ? 5000 : false,
   });
 
-  const { data: events } = useQuery({
+  const { data: events, refetch: refetchEvents } = useQuery({
     queryKey: ['campaign-events', id],
     queryFn: () => api.get<CommunicationEvent[]>(`/campaigns/${id}/events`),
     refetchInterval: 5000,
   });
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchCampaign(), refetchEvents()]);
+    setIsRefreshing(false);
+    toast.success('Campaign data refreshed');
+  };
 
   if (isLoading) {
     return (
@@ -167,7 +176,16 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             {campaign.channel} · {formatNumber(campaign.audienceSize)} recipients · {timeAgo(campaign.createdAt)}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+            title="Refresh campaign data"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
           {campaign.status === 'RUNNING' && (
             <>
               <button onClick={() => handleAction('pause')} className="btn-secondary text-xs py-1.5 px-3">Pause</button>
